@@ -100,12 +100,9 @@ def extract_traces(args):
     moe_layers = sorted(set(moe_layers))
     print(f"Found {len(moe_layers)} MoE layers: {moe_layers[:5]}...{moe_layers[-3:]}")
 
-    # Select anchor layers: early, mid, late
-    if len(moe_layers) >= 3:
-        anchor_layers = [moe_layers[0], moe_layers[len(moe_layers)//2], moe_layers[-1]]
-    else:
-        anchor_layers = moe_layers[:3]
-    print(f"Anchor layers for probing: {anchor_layers}")
+    # Use ALL MoE layers as anchor layers (probe every layer for max overlap)
+    anchor_layers = moe_layers
+    print(f"Anchor layers for probing: all {len(anchor_layers)} MoE layers")
 
     for layer_idx in anchor_layers:
         torch.save(gate_weights[layer_idx], save_dir / f"gate_weight_layer{layer_idx}.pt")
