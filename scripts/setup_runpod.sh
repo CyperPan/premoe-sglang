@@ -23,28 +23,36 @@ mkdir -p "$HF_HOME"
 echo 'export HF_HOME=/workspace/huggingface_cache' >> ~/.bashrc 2>/dev/null || true
 echo "[2/6] HF_HOME=$HF_HOME"
 
-# 3. Install dependencies
-echo "[3/6] Installing base dependencies..."
-pip install torch numpy matplotlib ninja -q
-pip install transformers==4.44.2 accelerate -q
-
-# 4. Install SGLang
-echo "[4/6] Installing SGLang..."
+# 3. Install SGLang first (it pins its own torch + transformers versions)
+echo "[3/6] Installing SGLang + dependencies..."
 pip install "sglang[all]" -q
+pip install numpy matplotlib ninja accelerate -q
 
-# 5. LD_LIBRARY_PATH
-TORCH_LIB=$(python -c "import torch; print(torch.__path__[0])")/lib
-export LD_LIBRARY_PATH=$TORCH_LIB:/usr/lib/x86_64-linux-gnu:/usr/local/cuda/lib64:$LD_LIBRARY_PATH
-echo "export LD_LIBRARY_PATH=$TORCH_LIB:/usr/lib/x86_64-linux-gnu:/usr/local/cuda/lib64:\$LD_LIBRARY_PATH" >> ~/.bashrc 2>/dev/null || true
-echo "[5/6] LD_LIBRARY_PATH set"
+# 4. Fix nvJitLink version mismatch BEFORE any torch import
+#    pip-installed nvidia packages (12.8) conflict with system CUDA (12.4)
+#    Solution: put pip's nvidia libs first in LD_LIBRARY_PATH
+echo "[4/6] Fixing LD_LIBRARY_PATH..."
+SITE_PKGS=$(python -c "import site; print(site.getsitepackages()[0])")
+NVJITLINK_DIR="${SITE_PKGS}/nvidia/nvjitlink/lib"
+if [ ! -d "$NVJITLINK_DIR" ]; then
+    NVJITLINK_DIR=""
+fi
+TORCH_LIB="${SITE_PKGS}/torch/lib"
+export LD_LIBRARY_PATH=$NVJITLINK_DIR:$TORCH_LIB:/usr/lib/x86_64-linux-gnu:/usr/local/cuda/lib64:$LD_LIBRARY_PATH
+echo "export LD_LIBRARY_PATH=$NVJITLINK_DIR:$TORCH_LIB:/usr/lib/x86_64-linux-gnu:/usr/local/cuda/lib64:\$LD_LIBRARY_PATH" >> ~/.bashrc 2>/dev/null || true
+echo "  nvjitlink=$NVJITLINK_DIR"
 
-# 6. Build C++ extension + install premoe package
-echo "[6/6] Building C++ extension & installing premoe..."
+# Verify torch loads
+python -c "import torch; print(f'  PyTorch {torch.__version__}, CUDA {torch.version.cuda}')"
+
+# 5. Build C++ extension + install premoe package
+echo "[5/6] Building C++ extension & installing premoe..."
 rm -rf build/ *.egg-info pre_moe_cpp*.so
 python setup.py build_ext --inplace
 BUILD_EXT=0 pip install -e . --no-build-isolation
 
-# Verify C++ extension
+# 6. Verify
+echo "[6/6] Verifying..."
 python -c "
 import pre_moe_cpp
 funcs = [x for x in dir(pre_moe_cpp) if not x.startswith('_')]
@@ -52,7 +60,6 @@ print(f'  C++ OK: {funcs}')
 assert len(funcs) >= 5, f'Expected >=5 functions, got {len(funcs)}: {funcs}'
 "
 
-# Version info
 python -c "
 import torch, sglang
 print(f'  PyTorch {torch.__version__}, CUDA {torch.version.cuda}, GPUs {torch.cuda.device_count()}')
