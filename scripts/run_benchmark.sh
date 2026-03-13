@@ -5,12 +5,12 @@ set -eo pipefail
 
 cd "$(dirname "$0")/.."
 
-# Fix nvidia lib version mismatch (must happen before any torch import)
+# Fix nvidia lib version mismatch: pip CUDA 12.8 libs must precede system CUDA 12.4
 SITE_PKGS=$(python -c "import site; print(site.getsitepackages()[0])")
-NVJITLINK_LIB="${SITE_PKGS}/nvidia/nvjitlink/lib/libnvJitLink.so.12"
-[ -f "$NVJITLINK_LIB" ] && export LD_PRELOAD="$NVJITLINK_LIB"
+NVIDIA_LIBS=$(python -c "import site,os,glob;sp=site.getsitepackages()[0];print(':'.join(d for d in sorted(glob.glob(os.path.join(sp,'nvidia','*','lib'))) if os.path.isdir(d)))")
 TORCH_LIB="${SITE_PKGS}/torch/lib"
-export LD_LIBRARY_PATH=$TORCH_LIB:/usr/lib/x86_64-linux-gnu:/usr/local/cuda/lib64:$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=${NVIDIA_LIBS}:${TORCH_LIB}:/usr/lib/x86_64-linux-gnu:/usr/local/cuda/lib64
+unset LD_PRELOAD 2>/dev/null || true
 export HF_HOME=${HF_HOME:-/workspace/huggingface_cache}
 
 mkdir -p results traces probes

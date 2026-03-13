@@ -27,21 +27,25 @@ echo "[3/5] Installing SGLang + dependencies..."
 pip install "sglang[all]" -q
 pip install numpy matplotlib ninja accelerate -q
 
-# 4. Fix nvJitLink version mismatch + build C++ extension
-#    pip nvidia packages (e.g. 12.8) can conflict with system CUDA (e.g. 12.4).
-#    Use LD_PRELOAD to force the pip version of libnvJitLink.
+# 4. Fix nvidia lib conflicts + build C++ extension
+#    pip installs nvidia CUDA 12.8 libs, but system has CUDA 12.4.
+#    PyTorch 2.9 needs 12.8 symbols. Solution: put ALL pip nvidia libs
+#    before system CUDA in LD_LIBRARY_PATH.
 echo "[4/5] Fixing nvidia lib paths & building C++ extension..."
 SITE_PKGS=$(python -c "import site; print(site.getsitepackages()[0])")
-NVJITLINK_LIB="${SITE_PKGS}/nvidia/nvjitlink/lib/libnvJitLink.so.12"
 TORCH_LIB="${SITE_PKGS}/torch/lib"
 
-# LD_PRELOAD forces the correct nvJitLink before anything else loads
-if [ -f "$NVJITLINK_LIB" ]; then
-    export LD_PRELOAD="$NVJITLINK_LIB"
-    echo "  LD_PRELOAD=$NVJITLINK_LIB"
-fi
-export LD_LIBRARY_PATH=$TORCH_LIB:/usr/lib/x86_64-linux-gnu:/usr/local/cuda/lib64:$LD_LIBRARY_PATH
-unset LD_PRELOAD_OLD 2>/dev/null || true
+# Collect ALL pip nvidia lib dirs (cuda_runtime, nvjitlink, cusparse, etc.)
+NVIDIA_LIBS=$(python -c "
+import site, os, glob
+sp = site.getsitepackages()[0]
+dirs = sorted(glob.glob(os.path.join(sp, 'nvidia', '*', 'lib')))
+print(':'.join(d for d in dirs if os.path.isdir(d)))
+")
+
+export LD_LIBRARY_PATH=${NVIDIA_LIBS}:${TORCH_LIB}:/usr/lib/x86_64-linux-gnu:/usr/local/cuda/lib64
+unset LD_PRELOAD 2>/dev/null || true
+echo "  nvidia libs: $(echo $NVIDIA_LIBS | tr ':' '\n' | wc -l) dirs"
 
 # Verify torch loads
 python -c "import torch; print(f'  PyTorch {torch.__version__}, CUDA {torch.version.cuda}')"
@@ -57,8 +61,7 @@ sed -i '/HF_HOME/d' ~/.bashrc 2>/dev/null || true
 cat >> ~/.bashrc << BASHEOF
 # PREMOE_ENV start
 export HF_HOME=/workspace/huggingface_cache
-export LD_PRELOAD=${NVJITLINK_LIB}
-export LD_LIBRARY_PATH=${TORCH_LIB}:/usr/lib/x86_64-linux-gnu:/usr/local/cuda/lib64:\$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=${NVIDIA_LIBS}:${TORCH_LIB}:/usr/lib/x86_64-linux-gnu:/usr/local/cuda/lib64:\$LD_LIBRARY_PATH
 # PREMOE_ENV end
 BASHEOF
 
