@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel", "torch>=2.0.0", "ninja"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "premoe-sglang"
+version = "0.1.0"
+description = "Pre-MoE: Speculative Expert Pre-Dispatch for SGLang"
+requires-python = ">=3.10"
+dependencies = [
+    "torch>=2.0.0",
+    "numpy>=1.24.0",
+    "sglang",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "matplotlib>=3.7.0",
+]
+train = [
+    "transformers==4.44.2",
+    "accelerate>=0.20.0",
+]
