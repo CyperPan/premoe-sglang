@@ -118,8 +118,8 @@ FORWARD_PATCH_BEFORE_ATTN = '''
                     _state = _torch.load(_probe_path, map_location=hidden_states.device, weights_only=True)
                     _dim = _state["linear.weight"].shape[1]
                     _n_exp = _state["linear.weight"].shape[0]
-                    self._premoe_probe = LinearProbe(_dim, _n_exp).to(hidden_states.device)
-                    self._premoe_probe.load_state_dict(_state)
+                    self._premoe_probe = LinearProbe(_dim, _n_exp).to(device=hidden_states.device, dtype=hidden_states.dtype)
+                    self._premoe_probe.load_state_dict({k: v.to(hidden_states.dtype) for k, v in _state.items()})
                     self._premoe_probe.eval()
                     self._premoe_num_experts = _n_exp
                     self._premoe_comm_stream = _torch.cuda.Stream(priority=-1)
