@@ -33,6 +33,7 @@ Environment variables (read at runtime by patched code):
 """
 
 import importlib
+import importlib.util
 import inspect
 import os
 import shutil
@@ -41,18 +42,40 @@ from pathlib import Path
 
 
 def _get_deepseek_v2_path() -> Path:
-    """Find the installed SGLang deepseek_v2.py."""
+    """Find the installed SGLang deepseek_v2.py without importing it.
+
+    Avoids triggering the full SGLang import chain (which may fail if
+    system libs like libnuma are missing).
+    """
+    # Method 1: use importlib to find the package without executing it
     try:
-        import sglang.srt.models.deepseek_v2 as mod
-        return Path(inspect.getfile(mod))
-    except ImportError:
-        for p in [
-            Path("/opt/miniconda3/lib/python3.13/site-packages/sglang/srt/models/deepseek_v2.py"),
-            Path(sys.prefix) / "lib" / f"python{sys.version_info.major}.{sys.version_info.minor}" / "site-packages" / "sglang" / "srt" / "models" / "deepseek_v2.py",
-        ]:
-            if p.exists():
-                return p
-        raise FileNotFoundError("Cannot find SGLang's deepseek_v2.py")
+        spec = importlib.util.find_spec("sglang.srt.models.deepseek_v2")
+        if spec and spec.origin:
+            return Path(spec.origin)
+    except (ModuleNotFoundError, ValueError):
+        pass
+
+    # Method 2: find sglang package root and construct path
+    try:
+        spec = importlib.util.find_spec("sglang")
+        if spec and spec.submodule_search_locations:
+            for loc in spec.submodule_search_locations:
+                p = Path(loc) / "srt" / "models" / "deepseek_v2.py"
+                if p.exists():
+                    return p
+    except (ModuleNotFoundError, ValueError):
+        pass
+
+    # Method 3: search common site-packages paths
+    for base in [
+        Path(sys.prefix) / "lib" / f"python{sys.version_info.major}.{sys.version_info.minor}" / "site-packages",
+        Path("/usr/local/lib") / f"python{sys.version_info.major}.{sys.version_info.minor}" / "dist-packages",
+    ]:
+        p = base / "sglang" / "srt" / "models" / "deepseek_v2.py"
+        if p.exists():
+            return p
+
+    raise FileNotFoundError("Cannot find SGLang's deepseek_v2.py")
 
 
 # ---------------------------------------------------------------------------
