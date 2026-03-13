@@ -54,13 +54,30 @@ if os.environ.get("BUILD_EXT", "1") != "0":
                     return d
             return None
 
+        def find_cuda_lib():
+            """Find CUDA library path (libcudart.so)."""
+            for d in [
+                "/usr/local/cuda/lib64",
+                "/usr/local/cuda/targets/x86_64-linux/lib",
+                "/usr/local/cuda-12.8/lib64",
+                "/usr/local/cuda-12.4/lib64",
+                "/usr/lib/x86_64-linux-gnu",
+            ]:
+                if os.path.isfile(os.path.join(d, "libcudart.so")) or \
+                   os.path.isfile(os.path.join(d, "libcudart.so.12")):
+                    return d
+            return None
+
         cuda_inc = find_cuda_inc()
+        cuda_lib = find_cuda_lib()
         nccl_inc, nccl_lib = find_nccl()
 
         include_dirs = []
         library_dirs = []
         if cuda_inc:
             include_dirs.append(cuda_inc)
+        if cuda_lib:
+            library_dirs.append(cuda_lib)
         if nccl_inc:
             include_dirs.append(nccl_inc)
         if nccl_lib:
